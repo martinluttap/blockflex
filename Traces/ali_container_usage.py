@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import os
+import pandas as pd
 
 #Collect data
 x_values = []
@@ -14,6 +15,11 @@ with open("ali_container_usage.dat", 'r') as f:
     data = f.readlines()
     y_values = list(map(float, data[0].split(",")))
     x_values = np.arange(len(data[0].split(",")))
+
+rolling_avg_df: pd.DataFrame = pd.DataFrame({'timestamp': x_values, 'cpu_util': y_values})
+print(rolling_avg_df.shape)
+print(rolling_avg_df.head(5))
+
 
 matplotlib.rcParams.update({'font.size': 16})
 matplotlib.rcParams.update({'font.family': 'serif'})
@@ -49,6 +55,7 @@ Graph.grid(visible=True, which='minor')
 
 Graph.set_xlim(0, len(x_values))
 Graph.set_ylim((0,35))
+plt.legend()
 
 PDF.savefig(Figure, bbox_inches='tight')
 PDF.close()
