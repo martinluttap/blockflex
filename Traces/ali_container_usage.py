@@ -26,7 +26,7 @@ PDF = PdfPages("ali_container_usage.pdf")
 
 plt.plot(x_values, y_values, '-c', label="avg")
 
-YLabel = plt.ylabel("Storage BW Util (%)", multialignment='center', fontsize=12)
+YLabel = plt.ylabel("CPU Util (%)", multialignment='center', fontsize=12)
 YLabel.set_position((0.0,0.5))
 YLabel.set_linespacing(0.5)
 
@@ -45,7 +45,7 @@ Graph.yaxis.set_ticks_position('none')
 Graph.set_axisbelow(True)
 Graph.yaxis.grid(color='lightgrey', linestyle='solid')
 
-Graph.grid(b=True, which='minor')
+Graph.grid(visible=True, which='minor')
 
 Graph.set_xlim(0, len(x_values))
 Graph.set_ylim((0,35))

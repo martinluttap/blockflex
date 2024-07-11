@@ -1,4 +1,5 @@
-FILE = "container_usage_sub.csv"
+# FILE = "container_usage_sub.csv"
+FILE = "10m_container_usage_sub.csv"
 """
 container_usage.csv format:
 +-----------------------------------------------------------------------------------------+
@@ -26,18 +27,18 @@ with open(FILE,'r') as infile:
         #Currently want to average the utilization over the course of the given second
         container_id, machine_id, time_stamp, cpu_util_percent, mem_util_percent, cpi, mem_gps, mkpi, net_in, net_out, disk_io_percent = line.strip().split(",")
         time_stamp = float(time_stamp)
-        if disk_io_percent:
+        if cpu_util_percent:
             ids.add(container_id)
             if (len(ids)) > max_size:
                 break
-            disk_io_percent = float(disk_io_percent)
-            if disk_io_percent < 0 or disk_io_percent > 100: 
+            cpu_util_percent = float(cpu_util_percent)
+            if cpu_util_percent < 0 or cpu_util_percent > 100: 
                 continue
             if time_stamp not in total:
-                total[time_stamp] = disk_io_percent
+                total[time_stamp] = cpu_util_percent
                 count[time_stamp] = 1
             else:
-                total[time_stamp] += disk_io_percent
+                total[time_stamp] += cpu_util_percent
                 count[time_stamp] += 1
 
 outfile = open("ali_container_usage.dat", 'w')
