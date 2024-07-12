@@ -16,11 +16,6 @@ with open("ali_container_usage.dat", 'r') as f:
     y_values = list(map(float, data[0].split(",")))
     x_values = np.arange(len(data[0].split(",")))
 
-rolling_avg_df: pd.DataFrame = pd.DataFrame({'timestamp': x_values, 'cpu_util': y_values})
-print(rolling_avg_df.shape)
-print(rolling_avg_df.head(5))
-
-
 matplotlib.rcParams.update({'font.size': 16})
 matplotlib.rcParams.update({'font.family': 'serif'})
 matplotlib.rcParams['xtick.major.pad'] = '8'

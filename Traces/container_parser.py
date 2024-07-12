@@ -1,12 +1,18 @@
 import csv
+import os
 from collections import OrderedDict
 import numpy as np
-import pandas as pd
 import pickle
 
-FILE = "container_usage_sub.csv"
+os.environ["MODIN_ENGINE"] = "dask"  # Modin will use Dask
+import modin.pandas as pd
+
+from distributed import Client
+client = Client() 
+
+# FILE = "container_usage_sub.csv"
 # FILE = "10m_container_usage_sub.csv"
-# FILE = "100k_container_usage_sub.csv"
+FILE = "100k_container_usage_sub.csv"
 BASENAME = f"parsed-{FILE.rstrip('.csv')}"
 """
 container_usage.csv format:
@@ -81,7 +87,7 @@ def analyze_app_groups():
 
     return df
 
-def per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
+def nopanda_per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
     container_cpu_d = {}
     ts_cid = OrderedDict()
     ts_cpu = OrderedDict()
@@ -94,6 +100,8 @@ def per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
         total_line += 1
     infile.seek(0)
 
+    ts_seen = set()
+    cid_seen = set()
     for idx, line in enumerate(infile):
         container_id, machine_id, time_stamp, cpu_util_percent, mem_util_percent, cpi, mem_gps, mkpi, net_in, net_out, disk_io_percent = line.strip().split(",")
         time_stamp = float(time_stamp)
@@ -102,16 +110,21 @@ def per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
             if cpu_util_percent < 0 or cpu_util_percent > 100: 
                 continue
             else:
-                ts_cid[time_stamp] = container_id
-                ts_cpu[time_stamp] = cpu_util_percent
+                if not time_stamp in ts_seen:
+                    ts_cid[time_stamp] = [container_id]
+                    ts_cpu[time_stamp] = [cpu_util_percent]
+                else:
+                    ts_cid[time_stamp].append(container_id)
+                    ts_cpu[time_stamp].append(cpu_util_percent)
+                ts_seen.add(time_stamp)
+                cid_seen.add(container_id)
         print(f'[FILE][{idx+1}/{total_line}] At {time_stamp} {container_id} {cpu_util_percent}...')
 
     all_ts = ts_cid.keys()
-    all_cids = list(OrderedDict({v: None for v in ts_cid.values()}))
 
     for idx, ts in enumerate(ts_cid.keys()):
         container_cpu_d[ts] = OrderedDict({
-            cid: np.nan for cid in all_cids
+            cid: np.nan for cid in cid_seen
         })
         print(f'[DICT_CREATE][{idx+1}/{len(all_ts)}] ...')
 
@@ -132,6 +145,7 @@ def per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
     outfile = open(f'{BASENAME}.csv', 'w')
     w = csv.writer(outfile)
     header = ['timestamp']
+    all_cids = list(cid_seen)
     header.extend(all_cids)
     w.writerow(header)
     for idx, ts in enumerate(ord_container_cpu_d.keys()):
@@ -141,6 +155,56 @@ def per_container_usage_overtime(df_unique_app: pd.DataFrame, usage_fpath: str):
 
     print(f'ALL DONE!')
 
+def per_container_usage_overtime():
+    DATA_DIR: str = '/home/cc/online-learning/blockflex/Traces'
+    FILE = f"{DATA_DIR}/container_usage_sub.csv"
+    BASENAME = f"{FILE.split('/')[-1].rstrip('.csv')}"
+
+    df = pd.read_csv(FILE, header=None, usecols=[0,2,3], 
+                 names=['container_id', 'time_stamp', 'cpu_util_percent'])    
+
+    # For each timestamp, get list of observed containers and their respective cpu utilization.    
+    print('Grouping by timestamp ...')
+    df = df[df['container_id'].notna()]
+    # df = df.iloc[:10000,:]
+    df = df.set_index('time_stamp').sort_index()
+    df = df.groupby(df.index).agg({
+        'container_id': list,
+        'cpu_util_percent': list
+    })
+    print(df.head())
+
+    # Then we construct a two-level dictionary. 
+    # At the first level, we use timestamp and container_id
+    # At the second level, each container_id has cpu at the aforementioned timestamp. 
+    print('Constructing dictionary by timestamp ...')
+    cid_seen = set()
+    cid_cpu_by_ts = OrderedDict()
+    count_row = 0
+    for index, row in df.iterrows():
+        cid_cpu_by_ts[index] = OrderedDict()
+        for cid, cpu in zip(row['container_id'], row['cpu_util_percent']):
+            cid_cpu_by_ts[index][cid] = cpu
+            cid_seen.add(cid)
+        count_row += 1
+        print(f'[DICT_CREATE][{count_row}/{df.shape[0]}]')
+
+    # Then we make a sparse matrix where non-observed container_id at each timestamp is given cpu_util = NaN
+    print(f'Filling NaN ...')
+    count_row = 0
+    for index, row in df.iterrows():
+        cid_current_ts = set(cid_cpu_by_ts[index].keys())
+        cid_na = cid_seen.difference(cid_current_ts)
+        for cid in cid_na:
+            cid_cpu_by_ts[index][cid] = np.nan
+        count_row += 1
+        print(f'[DICT_FILL][{count_row}/{df.shape[0]}]')
+
+    # Finally, we save the data processed so far.
+    print(f'Transpose and saving dataframe to per_container-{BASENAME}.csv ...')
+    all_container_df = pd.DataFrame.from_dict(cid_cpu_by_ts).transpose()
+    all_container_df.to_csv(f'per_container-{BASENAME}.csv')    
+
 # analyze_container_ids_and_usage()
-df_unique_app: pd.DataFrame = analyze_app_groups()
-per_container_usage_overtime(df_unique_app, FILE)
+# df_unique_app: pd.DataFrame = analyze_app_groups()
+per_container_usage_overtime()
